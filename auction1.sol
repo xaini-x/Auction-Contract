@@ -1,108 +1,208 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.0;
+pragma solidity 0.8.12;
 import "./transfer.sol";
 
 contract Auction is RTC {
     struct User {
+        uint256 userType;
         address addrs;
-        bool exist;
     }
-    
-    struct Owner {
-        address owner;
-        uint256 id;
-        bool exist;
-    }
-
-    Owner[] public IDexist;
-    User[] public registerd;
-    uint256 index;
-    uint256 largest = 0;
+    address payable reciever;
+    mapping(address => uint256) public Index;
+    mapping(address => mapping(uint256 => uint256)) public SponsorIndex;
+    User[] public users;
     bool exist = true;
-    address highestbidderr;
     mapping(address => mapping(uint256 => uint256)) startTime;
-    mapping(address => mapping(uint256 => uint256)) public bid;
-      mapping(address => mapping(uint256 => uint256)) public bids;
-      mapping(uint => mapping(uint256 => address)) public hbidder;
-  mapping(uint => address) highestbidder;
-    mapping(address => bool) Index;
-    mapping(uint=> uint) minimumbid;
-    mapping(address => uint256) bidtotal;
-    mapping(uint => uint256) endTime;
-    mapping(uint256 => mapping(address => uint)) public bidDetail;
-mapping(uint256 => mapping(address => uint[]))public  bidDetails;
-mapping(uint256 => mapping(address => uint))public  bidDetailss;
-    function register() public {
-        require(Index[msg.sender] != exist, " already registered");
-        Index[msg.sender] = exist;
-        User memory Register = User(msg.sender, exist);
-        registerd.push(Register);
-        uint256 balance = 100;
-        _balances[msg.sender] = balance;
-        emit registration(index, Index[msg.sender], _balances[msg.sender]);
+    mapping(uint256 => mapping(uint256 => address)) public hbidder;
+    mapping(uint256 => address) highestbidder;
+    mapping(uint256 => uint256) minimumbid;
+    mapping(uint256 => uint256) endTime;
+    mapping(address => mapping(uint256 => uint256)) registerDetail;
+    mapping(uint256 => mapping(address => uint256)) public bidDetail;
+    mapping(uint256 => mapping(address => uint256)) public bidDetailss;
+
+    // mintid ---------------------
+    constructor(address payable _reciever) {
+        reciever = _reciever;
     }
 
-    function Seller(uint256 id  , uint mbid) public {
-        require(Index[msg.sender] == exist, " register first");
-     uint charge = 1;
-        startTime[msg.sender][id] = block.timestamp;
+    function MintID(uint256 id) public {
         _mint(msg.sender, id);
-        RTC.transfer(msg.sender, address(this), charge);
-          _totalSupply += charge;
         _owners[id] = msg.sender;
-        minimumbid[id] = mbid;
-        endTime[id] = startTime[msg.sender][id] + 100;
-        Owner memory IDcheck = Owner(msg.sender, id, exist);
-        IDexist.push(IDcheck);
-        emit ItemDetail(startTime[msg.sender][id], _owners[id], id);
+        emit ItemDetail(msg.sender, id);
     }
-function Bidding(uint id  ,  uint count) public {
-    require (minimumbid[id]<   bidDetailss[id] [msg.sender] + count,"enter more than  minimum bid ");
-        require(block.timestamp  <= endTime[id],"timeover");
-         require(_owners[id] != msg.sender,"_owners cant bid");
-        require ( Index[msg.sender] == exist," register first");
-        require( _balances[msg.sender] != 0 ,"not enough balance");
- require (bidDetailss[id][msg.sender] + count > bidDetailss[id] [highestbidder[id]]," bid more than last price");
-   RTC.transfer(msg.sender, address(this), count);
-    bidDetail[id] [msg.sender] = count +  bidDetailss[id] [msg.sender];
-      bidDetailss[id] [msg.sender] += count;
-      uint detail =   bidDetailss[id] [msg.sender];
-       bidDetails[id] [msg.sender].push(detail);
-       hbidder[id][count] = msg.sender;
-       highestbidder[id] =  hbidder[id][count];
-        _totalSupply += count;
- emit BIDdetail(
-        
-        id,
-        bidDetailss[id] [msg.sender],
-       _balances[msg.sender]
-    );
-}
 
+    // total balance of given address -----------------------
+    function balance(address addr) public view virtual returns (uint256) {
+        return addr.balance;
+    }
 
-function winner(uint id ) public view returns(address , uint) {
-    return (highestbidder[id] ,  bidDetailss[id] [highestbidder[id]]);
-}
-  
-    function Winner(uint256 id) public {
-         uint detail =   bidDetailss[id] [msg.sender] ;
-        require (detail !=0,"");
-        RTC.transfer(address(this), _owners[id],  bidDetailss[id] [msg.sender]);
-        _totalSupply -=  bidDetailss[id] [msg.sender];
-        ERC721.transferFrom(_owners[id], highestbidder[id], id);
-            detail= 0;
+    //totalsuppy of the contract address
+    function totalsupply() public view returns (uint256) {
+        return address(this).balance;
+    }
+
+    // register for auction -----------------------------
+    //sponsor = 1 && registration charge 1000 wei
+    // bidder  = 2 && registration charge 500 wei
+    function register(uint256 Usertype) public payable {
+        uint256 AuctionCharge;
+        AuctionCharge = msg.value;
+        require(
+            (Usertype == 1 && AuctionCharge == 1000) ||
+                (Usertype == 2 && AuctionCharge == 500),
+            " sponsor = 1 || bidder  = 2"
+        );
+        require(Index[msg.sender] == 0, "User is registered");
+
+        Index[msg.sender] = Usertype;
+        User memory user = User(Usertype, msg.sender);
+        users.push(user);
+        registerDetail[msg.sender][Usertype] = AuctionCharge;
+        emit registration(msg.sender, Index[msg.sender], _balances[msg.sender]);
+    }
+
+    // transfer id tosponser ----------------------------
+    // only owner can approve of token id access transfer
+    function ApproveID(address sponsor, uint256 id) public {
+        require(msg.sender == _owners[id], " only owner can approve  ");
+        require(Index[sponsor] == 1, " only to sponsor");
+
+        _approve(sponsor, id);
+        _isApprovedOrOwner(sponsor, id);
+        _setApprovalForAll(msg.sender, sponsor, exist);
+    }
+
+    // auction start by sponsor---------------------------------
+    //auction charge 1 eth
+
+    function AuctionStart(uint256 id, uint256 minimumBid) public payable {
+        require(msg.value == 1 ether, " charge for auction start");
+        require(Index[msg.sender] == 1, " only sponsor can start auction");
+        SponsorIndex[msg.sender][Index[msg.sender]] = id;
+        reciever.transfer(msg.value);
+        uint256 charge;
+        charge = msg.value;
+        startTime[msg.sender][id] = block.timestamp;
+        minimumbid[id] = minimumBid;
+        _transferID(_owners[id], address(this), id);
+        // after id transfer to contract approval is need for sponsor
+        _approve(msg.sender, id);
+        _setApprovalForAll(address(this), msg.sender, exist);
+        endTime[id] = startTime[msg.sender][id] + 200;
+        emit AUCTIONSTART(
+            startTime[msg.sender][id],
+            _owners[id],
+            minimumBid,
+            endTime[id]
+        );
+    }
+
+    // biddding start on item------------------------------
+    // enter more than minimum bid
+    // bid before time over
+    function Bidding(uint256 id) public payable {
+        uint256 bid;
+        bid = msg.value;
+        require(block.timestamp <= endTime[id], "timeover");
+        require(Index[msg.sender] == 2, " register as bidder");
+
+        require(
+            bidDetailss[id][msg.sender] + bid >
+                bidDetailss[id][highestbidder[id]],
+            " bid more than last price"
+        );
+        require(
+            minimumbid[id] < bid + bidDetailss[id][msg.sender],
+            "bid more than minimum prize"
+        );
+        bidDetail[id][msg.sender] = bid + bidDetailss[id][msg.sender];
+        bidDetailss[id][msg.sender] += bid;
+        hbidder[id][bid] = msg.sender;
+        highestbidder[id] = hbidder[id][bid];
+        emit BIDdetail(id, bidDetailss[id][msg.sender], _balances[msg.sender]);
+    }
+
+    // winnner details of highest bidder
+    function winner(uint256 id) public view returns (address, uint256) {
+        return (highestbidder[id], bidDetailss[id][highestbidder[id]]);
+    }
+
+    // transfer id to bidder and money to id owner--------------
+
+    function Winner(uint256 id, address payable _to) public payable {
+        require(
+            SponsorIndex[msg.sender][Index[msg.sender]] == id &&
+                block.timestamp >= endTime[id],
+            " after auction over"
+        );
+        uint256 detail = bidDetailss[id][highestbidder[id]];
+        require(detail != 0, "");
+        _to.transfer(detail);
+        _transferID(_owners[id], highestbidder[id], id);
+        detail = 0;
+        Index[msg.sender] = 0;
+        emit TransferDetail(
+            id,
+            highestbidder[id],
+            bidDetailss[id][highestbidder[id]],
+            _to
+        );
+    }
+
+    // if auction cancalled
+    // transfer id to address
+    //sponsorship for id will cancel
+    function AuctionCancel(uint256 id, address to) public {
+        require(
+            SponsorIndex[msg.sender][Index[msg.sender]] == id,
+            " only specific IDsponsor can "
+        );
+        _transferID(_owners[id], to, id);
+        SponsorIndex[msg.sender][Index[msg.sender]] = 0;
+    }
+
+    // transfering money to the owner address
+    function withdraw() public {
+        reciever.transfer(address(this).balance);
+    }
+
+    // only bid value will transfer not registration fees
+    function claimBid(uint256 id) public payable returns (bool) {
+        require(
+            SponsorIndex[msg.sender][Index[msg.sender]] != id ||
+                block.timestamp >= endTime[id],
+            "after auction over or cancelled"
+        );
+        payable(msg.sender).transfer(bidDetail[id][msg.sender]);
+        return true;
+    }
+
+    function wrongUser() public {
+        require(Index[msg.sender] == 1 || Index[msg.sender] == 2, "   ");
+        Index[msg.sender] = 0;
     }
 
     event registration(
-        uint256 onIndex,
-        bool redisteredAddress,
+        address redisteredAddress,
+        uint256 UserType,
         uint256 balance
     );
-    event ItemDetail(uint256 StartTime,address owner, uint256 itemId);
-    event BIDdetail(
-        uint256 onIndex,
-        uint256 Amount,
-        uint256 remainingCounts
+    event ItemDetail(address owner, uint256 itemId);
+    event TRANSFERID(address Sponsor, uint256 id);
+    event AUCTIONSTART(
+        uint256 startTime,
+        address owners,
+        uint256 minimumBID,
+        uint256 endTime
     );
-    event _Winner(uint id,address highestBidder, uint256 amout);
+    event BIDdetail(uint256 onIndex, uint256 Amount, uint256 remainingbids);
+    event _Winner(uint256 id, address highestBidder, uint256 amout);
+
+    event TransferDetail(
+        uint256 TransferID,
+        address newOwner,
+        uint256 transferedAmount,
+        address amountTransferedTo
+    );
 }
