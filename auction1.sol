@@ -22,11 +22,11 @@ contract Auction is RTC {
     mapping(uint256 => mapping(address => uint256)) public bidDetailss;
 uint public totalauctioncharge;
 
-    // mintid ---------------------
+    
     constructor(address payable _reciever) {
         reciever = _reciever;
     }
-
+// mintid ---------------------
     function MintID(uint256 id) public {
         _mint(msg.sender, id);
         _owners[id] = msg.sender;
