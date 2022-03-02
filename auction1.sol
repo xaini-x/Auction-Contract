@@ -17,9 +17,10 @@ contract Auction is RTC {
     mapping(uint256 => address) highestbidder;
     mapping(uint256 => uint256) minimumbid;
     mapping(uint256 => uint256) endTime;
-    mapping(address => mapping(uint256 => uint256)) registerDetail;
+    mapping(uint =>  uint256) registerDetail;
     mapping(uint256 => mapping(address => uint256)) public bidDetail;
     mapping(uint256 => mapping(address => uint256)) public bidDetailss;
+uint public totalauctioncharge;
 
     // mintid ---------------------
     constructor(address payable _reciever) {
@@ -58,7 +59,11 @@ contract Auction is RTC {
         Index[msg.sender] = Usertype;
         User memory user = User(Usertype, msg.sender);
         users.push(user);
-        registerDetail[msg.sender][Usertype] = AuctionCharge;
+        
+        registerDetail[Usertype] = AuctionCharge;
+         totalauctioncharge += registerDetail[Usertype] ;
+     
+      
         emit registration(msg.sender, Index[msg.sender], _balances[msg.sender]);
     }
 
@@ -125,7 +130,7 @@ contract Auction is RTC {
 
     // winnner details of highest bidder
     function winner(uint256 id) public view returns (address, uint256) {
-        return (highestbidder[id], bidDetailss[id][highestbidder[id]]);
+        return (highestbidder[id], totalauctioncharge);
     }
 
     // transfer id to bidder and money to id owner--------------
@@ -138,7 +143,10 @@ contract Auction is RTC {
         );
         uint256 detail = bidDetailss[id][highestbidder[id]];
         require(detail != 0, "");
-        _to.transfer(detail);
+        uint sponserCharge = (detail * 5 )/100;
+         payable(msg.sender).transfer(sponserCharge);
+        uint ownerTransfer = detail- sponserCharge;
+        _to.transfer(ownerTransfer);
         _transferID(_owners[id], highestbidder[id], id);
         detail = 0;
         Index[msg.sender] = 0;
@@ -164,7 +172,9 @@ contract Auction is RTC {
 
     // transfering money to the owner address
     function withdraw() public {
-        reciever.transfer(address(this).balance);
+        require(msg.sender == reciever,"");
+        reciever.transfer(totalauctioncharge);
+        totalauctioncharge = 0;
     }
 
     // only bid value will transfer not registration fees
