@@ -130,7 +130,7 @@ uint public totalauctioncharge;
 
     // winnner details of highest bidder
     function winner(uint256 id) public view returns (address, uint256) {
-        return (highestbidder[id], totalauctioncharge);
+        return (highestbidder[id],  bidDetail[id][msg.sender]);
     }
 
     // transfer id to bidder and money to id owner--------------
