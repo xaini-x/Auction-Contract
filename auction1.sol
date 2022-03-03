@@ -8,19 +8,19 @@ contract Auction is RTC {
         address addrs;
     }
     address payable reciever;
-    mapping(address => uint256) public Index;
+    mapping(address => uint256)  Index;
     mapping(address => mapping(uint256 => uint256)) public SponsorIndex;
     User[] public users;
     bool exist = true;
      uint256[] public BIDdetails;
-    mapping(address => mapping(uint256 => uint256)) startTime;
-    mapping(uint256 => mapping(uint256 => address)) public hbidder;
+    mapping(address => mapping(uint256 => uint256))public startTime;
+    mapping(uint256 => mapping(uint256 => address))  hbidder;
     mapping(uint256 => address) highestbidder;
     mapping(uint256 => uint256) minimumbid;
     mapping(uint256 => uint256) endTime;
     mapping(uint =>  uint256) registerDetail;
-    mapping(uint256 => mapping(address => uint256)) public bidDetail;
-    mapping(uint256 => mapping(address => uint256)) public bidDetailss;
+    mapping(uint256 => mapping(address => uint256))  bidDetail;
+    mapping(uint256 => mapping(address => uint256))  bidDetailss;
 uint public totalauctioncharge;
 
     
@@ -28,7 +28,7 @@ uint public totalauctioncharge;
         reciever = _reciever;
     }
 
-// mintid ---------------------
+// mintid address != sponser address ---------------------
     function MintID(uint256 id) public {
         _mint(msg.sender, id);
         _owners[id] = msg.sender;
@@ -57,15 +57,11 @@ uint public totalauctioncharge;
             " sponsor = 1 || bidder  = 2"
         );
         require(Index[msg.sender] == 0, "User is registered");
-
         Index[msg.sender] = Usertype;
         User memory user = User(Usertype, msg.sender);
         users.push(user);
-        
         registerDetail[Usertype] = AuctionCharge;
          totalauctioncharge += registerDetail[Usertype] ;
-     
-      
         emit registration(msg.sender, Index[msg.sender], _balances[msg.sender]);
     }
 
@@ -74,7 +70,6 @@ uint public totalauctioncharge;
     function ApproveID(address sponsor, uint256 id) public {
         require(msg.sender == _owners[id], " only owner can approve  ");
         require(Index[sponsor] == 1, " only to sponsor");
-
         _approve(sponsor, id);
         _isApprovedOrOwner(sponsor, id);
         _setApprovalForAll(msg.sender, sponsor, exist);
@@ -115,7 +110,6 @@ uint public totalauctioncharge;
         bid = msg.value;
         require(block.timestamp <= endTime[id], "timeover");
         require(Index[msg.sender] == 2, " register as bidder");
-       
         require(
             bidDetailss[id][msg.sender] +bid >
                 bidDetailss[id][highestbidder[id]],
@@ -142,14 +136,13 @@ uint public totalauctioncharge;
     //transfer highestbid amount to idowner subtracting the sponsorcharge 
     function Winner(uint256 id, address payable _to) public payable {
         require(
-            SponsorIndex[msg.sender][Index[msg.sender]] == id  , " auction is cancel or time not over"
+            SponsorIndex[msg.sender][Index[msg.sender]] == id  , " not the specific id sponsor"
         );
-         require(        block.timestamp > endTime[id],
+         require(block.timestamp > endTime[id],
             "  time not over"
         );
         uint256 detail = bidDetailss[id][highestbidder[id]];
         require(detail != 0, "");
-
         //sponsercharge 5% of highest bid
         uint sponserCharge = (detail * 5 )/100;
          payable(msg.sender).transfer(sponserCharge);
@@ -182,19 +175,20 @@ uint public totalauctioncharge;
         SponsorIndex[msg.sender][Index[msg.sender]] = 0;
     }
 
-    // transfering money to the owner address
+    // transfering money to the given (reciver)address in constructor 
     function withdraw() public {
         require(msg.sender == reciever,"");
         reciever.transfer(totalauctioncharge);
         totalauctioncharge = 0;
     }
-
+//winner declare || auction cancel-----------------------
     // only bid value will transfer not registration fees
     function claimBid(uint256 id) public payable returns (bool) {
-        require(
-            SponsorIndex[msg.sender][Index[msg.sender]] != id ||
-                block.timestamp >= endTime[id],
-            "after auction over or cancelled"
+         require(
+            SponsorIndex[msg.sender][Index[msg.sender]] != id  , " not the specific id sponsor"
+        );
+         require(block.timestamp > endTime[id],
+            "  time not over"
         );
         payable(msg.sender).transfer(bidDetail[id][msg.sender]);
         return true;
