@@ -10,7 +10,6 @@ contract Auction is RTC {
     address payable owner;
     mapping(address => uint256)  public Index;
     mapping(uint=>bool ) public ids; 
-     mapping(address => mapping(uint256 => bool)) public SponsorAPPROVALID;
     mapping(address => mapping(uint256 => uint256)) public SponsorIndex;
     User[] public users;
     bool exist = true;
@@ -20,12 +19,10 @@ contract Auction is RTC {
     mapping(uint256 => address) public highestbidder;
     mapping(uint256 => uint256) public minimumbid;
     mapping(uint256 => uint256) public endTime;
-    mapping(uint =>  uint256) public registerDetail;
     mapping(uint256 => mapping(address => uint256)) public  bidDetail;
     mapping(uint256 => mapping(address => uint256))  public bidDetailss;
 uint public totalauctioncharge;
 
-    
     constructor() {
         owner == msg.sender;
     }
@@ -62,11 +59,18 @@ uint public totalauctioncharge;
         Index[msg.sender] = Usertype;
         User memory user = User(Usertype, msg.sender);
         users.push(user);
-        registerDetail[Usertype] = AuctionCharge;
-         totalauctioncharge += registerDetail[Usertype] ;
+    
+         totalauctioncharge += AuctionCharge;
         emit registration(msg.sender, Index[msg.sender], _balances[msg.sender]);
     }
 
+// if you registerd as wrong user registration fee will not transfer
+//user id will delete
+    function cancelRegistration() public {
+        require(Index[msg.sender] == 1 || Index[msg.sender] == 2, "   ");
+        Index[msg.sender] = 0;
+    }
+    
     // transfer id tosponser ----------------------------
     // only owner can approve of token id access transfer
     function ApproveID(address sponsor, uint256 id) public {
@@ -80,11 +84,10 @@ uint public totalauctioncharge;
 
     // auction start by sponsor---------------------------------
     //auction charge 1 eth
-    function AuctionStart(uint256 id, uint256 minimumBid ,  uint endT) public payable {
-      
+    function startAuction(uint256 id, uint256 minimumBid ,  uint endT) public payable {
         require(_tokenApprovals[id] == msg.sender,"you are not the sponsor of the id");
         require(msg.value == 1 ether, " charge for auction start");
-        require(Index[msg.sender] == 1, " only sponsor can start auction");
+        require(Index[msg.sender] == 1, "must apply for registration");
           require(ids[id]  !=exist,
             " auction already start on this id"
         );
@@ -101,9 +104,7 @@ uint public totalauctioncharge;
         // after id transfer to contract approval is need for sponsor
         _approve(msg.sender, id);
         _setApprovalForAll(address(this), msg.sender, exist);
-       
         endTime[id] = startTime[id] + endT;
-        
         emit AUCTIONSTART(
             startTime[id],
             _owners[id],
@@ -119,7 +120,7 @@ uint public totalauctioncharge;
         uint bid;
         bid = msg.value;
         require(block.timestamp <= endTime[id], "timeover");
-        require(Index[msg.sender] == 2, " register as bidder");
+        require(Index[msg.sender] == 2, " must apply for registration");
         require(
             bidDetailss[id][msg.sender] +bid >
                 bidDetailss[id][highestbidder[id]],
@@ -180,6 +181,7 @@ uint public totalauctioncharge;
             SponsorIndex[msg.sender][Index[msg.sender]] == id,
             " only specific IDsponsor can "
         );
+       
         // id will transfer to (to) address
         _transferID(_owners[id], to, id);
         //sponsorship  will cancel for the specific id
@@ -205,12 +207,7 @@ uint public totalauctioncharge;
         payable(msg.sender).transfer(bidDetail[id][msg.sender]);
         return true;
     }
-// if you registerd as wrong user registration fee will not transfer
-//user id will delete
-    function wrongUser() public {
-        require(Index[msg.sender] == 1 || Index[msg.sender] == 2, "   ");
-        Index[msg.sender] = 0;
-    }
+
 
     event registration(
         address redisteredAddress,
