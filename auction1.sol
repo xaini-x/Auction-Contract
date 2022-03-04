@@ -7,25 +7,24 @@ contract Auction is RTC {
         uint256 userType;
         address addrs;
     }
-    address payable reciever;
-    mapping(address => uint256)  Index;
+    address payable owner;
+    mapping(address => uint256)  public Index;
+    mapping(uint=>bool ) public ids; 
     mapping(address => mapping(uint256 => uint256)) public SponsorIndex;
     User[] public users;
     bool exist = true;
      uint256[] public BIDdetails;
-    mapping(address => mapping(uint256 => uint256))public startTime;
-    mapping(uint256 => mapping(uint256 => address))  hbidder;
-    mapping(uint256 => address) highestbidder;
-    mapping(uint256 => uint256) minimumbid;
-    mapping(uint256 => uint256) endTime;
-    mapping(uint =>  uint256) registerDetail;
-    mapping(uint256 => mapping(address => uint256))  bidDetail;
-    mapping(uint256 => mapping(address => uint256))  bidDetailss;
+     mapping(uint256 => uint256)public startTime;
+    mapping(uint256 => mapping(uint256 => address))  public hbidder;
+    mapping(uint256 => address) public highestbidder;
+    mapping(uint256 => uint256) public minimumbid;
+    mapping(uint256 => uint256) public endTime;
+    mapping(uint256 => mapping(address => uint256)) public  bidDetail;
+    mapping(uint256 => mapping(address => uint256))  public bidDetailss;
 uint public totalauctioncharge;
 
-    
-    constructor(address payable _reciever) {
-        reciever = _reciever;
+    constructor() {
+        owner == msg.sender;
     }
 
 // mintid address != sponser address ---------------------
@@ -60,16 +59,24 @@ uint public totalauctioncharge;
         Index[msg.sender] = Usertype;
         User memory user = User(Usertype, msg.sender);
         users.push(user);
-        registerDetail[Usertype] = AuctionCharge;
-         totalauctioncharge += registerDetail[Usertype] ;
+    
+         totalauctioncharge += AuctionCharge;
         emit registration(msg.sender, Index[msg.sender], _balances[msg.sender]);
     }
 
+// if you registerd as wrong user registration fee will not transfer
+//user id will delete
+    function cancelRegistration() public {
+        require(Index[msg.sender] == 1 || Index[msg.sender] == 2, "   ");
+        Index[msg.sender] = 0;
+    }
+    
     // transfer id tosponser ----------------------------
     // only owner can approve of token id access transfer
     function ApproveID(address sponsor, uint256 id) public {
         require(msg.sender == _owners[id], " only owner can approve  ");
         require(Index[sponsor] == 1, " only to sponsor");
+        // SponsorAPPROVALID[msg.sender][id] = exist;
         _approve(sponsor, id);
         _isApprovedOrOwner(sponsor, id);
         _setApprovalForAll(msg.sender, sponsor, exist);
@@ -77,25 +84,29 @@ uint public totalauctioncharge;
 
     // auction start by sponsor---------------------------------
     //auction charge 1 eth
-
-    function AuctionStart(uint256 id, uint256 minimumBid) public payable {
+    function startAuction(uint256 id, uint256 minimumBid ,  uint endT) public payable {
+        require(_tokenApprovals[id] == msg.sender,"you are not the sponsor of the id");
         require(msg.value == 1 ether, " charge for auction start");
-        require(Index[msg.sender] == 1, " only sponsor can start auction");
+        require(Index[msg.sender] == 1, "must apply for registration");
+          require(ids[id]  !=exist,
+            " auction already start on this id"
+        );
       //id access to sponsor
         SponsorIndex[msg.sender][Index[msg.sender]] = id;
+        ids[id]= exist;
         // auction charge will send to recier=ver address 
-        reciever.transfer(msg.value);
+        owner.transfer(msg.value);
         uint256 charge;
         charge = msg.value;
-        startTime[msg.sender][id] = block.timestamp;
+        startTime[id] = block.timestamp;
         minimumbid[id] = minimumBid;
         _transferID(_owners[id], address(this), id);
         // after id transfer to contract approval is need for sponsor
         _approve(msg.sender, id);
         _setApprovalForAll(address(this), msg.sender, exist);
-        endTime[id] = startTime[msg.sender][id] + 200;
+        endTime[id] = startTime[id] + endT;
         emit AUCTIONSTART(
-            startTime[msg.sender][id],
+            startTime[id],
             _owners[id],
             minimumBid,
             endTime[id]
@@ -109,7 +120,7 @@ uint public totalauctioncharge;
         uint bid;
         bid = msg.value;
         require(block.timestamp <= endTime[id], "timeover");
-        require(Index[msg.sender] == 2, " register as bidder");
+        require(Index[msg.sender] == 2, " must apply for registration");
         require(
             bidDetailss[id][msg.sender] +bid >
                 bidDetailss[id][highestbidder[id]],
@@ -117,7 +128,7 @@ uint public totalauctioncharge;
         );
         require(
             minimumbid[id] < bid + bidDetailss[id][msg.sender],
-            "bid more than minimum prize");
+            "bid more than minimum price");
         bidDetail[id][msg.sender] = bid + bidDetailss[id][msg.sender];
         bidDetailss[id][msg.sender] += bid;
         BIDdetails.push( bidDetail[id][msg.sender]);
@@ -127,14 +138,14 @@ uint public totalauctioncharge;
     }
 
     // winnner details of highest bidder
-    function winner(uint256 id) public view returns (address, uint256) {
+    function higghestbid(uint256 id) public view returns (address, uint256) {
         return (highestbidder[id],  bidDetail[id][highestbidder[id]]);
     }
 
     // transfer id to bidder and money to id owner--------------
     // transfer sponsorcharge to sponsor address
     //transfer highestbid amount to idowner subtracting the sponsorcharge 
-    function Winner(uint256 id, address payable _to) public payable {
+    function WinnerDeclare(uint256 id, address payable _to) public payable {
         require(
             SponsorIndex[msg.sender][Index[msg.sender]] == id  , " not the specific id sponsor"
         );
@@ -154,6 +165,7 @@ uint public totalauctioncharge;
         detail = 0;
          //after winner declare ,sponsorship  will cancel for the specific id
         SponsorIndex[msg.sender][Index[msg.sender]] = 0;
+        ids[id]=false;
         emit TransferDetail(
             id,
             highestbidder[id],
@@ -169,16 +181,18 @@ uint public totalauctioncharge;
             SponsorIndex[msg.sender][Index[msg.sender]] == id,
             " only specific IDsponsor can "
         );
+       
         // id will transfer to (to) address
         _transferID(_owners[id], to, id);
         //sponsorship  will cancel for the specific id
         SponsorIndex[msg.sender][Index[msg.sender]] = 0;
+        ids[id]=false;
     }
 
     // transfering money to the given (reciver)address in constructor 
     function withdraw() public {
-        require(msg.sender == reciever,"");
-        reciever.transfer(totalauctioncharge);
+        require(msg.sender == owner,"");
+        owner.transfer(totalauctioncharge);
         totalauctioncharge = 0;
     }
 //winner declare || auction cancel-----------------------
@@ -193,12 +207,7 @@ uint public totalauctioncharge;
         payable(msg.sender).transfer(bidDetail[id][msg.sender]);
         return true;
     }
-// if you registerd as wrong user registration fee will not transfer
-//user id will delete
-    function wrongUser() public {
-        require(Index[msg.sender] == 1 || Index[msg.sender] == 2, "   ");
-        Index[msg.sender] = 0;
-    }
+
 
     event registration(
         address redisteredAddress,
